@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Pokémon-ähnliches Bewegungssystem mit Minimap und Klick</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #e0e0e0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #viewport {
+      position: relative;
+      width: 480px; /* 15 Tiles à 32px */
+      height: 352px; /* 11 Tiles à 32px */
+      overflow: hidden;
+      border: 2px solid #333;
+      background: #000;
+    }
+    #gameArea {
+      position: absolute;
+      width: 1920px; /* 60 Tiles à 32px */
+      height: 1408px; /* 44 Tiles à 32px */
+      background: #a0d0a0; /* Grasfarbe */
+      top: 0;
+      left: 0;
+    }
+    #character {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      background: #ff5555; /* Spieler als rotes Rechteck */
+      border-radius: 4px;
+      z-index: 10;
+    }
+    .tree {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      background: #006400; /* Baum als dunkelgrüner Kreis */
+      border-radius: 50%;
+    }
+    #minimap {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 120px; /* 60 Tiles skaliert auf 2px pro Tile */
+      height: 88px; /* 44 Tiles skaliert auf 2px pro Tile */
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid #333;
+    }
+    #minimapPlayer {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: #ff5555;
+    }
+    .minimapTree {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: #006400;
+    }
+    #minimapViewport {
+      position: absolute;
+      border: 1px solid #000;
+      background: rgba(0, 0, 0, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport">
+    <div id="gameArea" tabindex="0">
+      <div id="character"></div>
+      <!-- Bäume werden dynamisch hinzugefügt -->
+    </div>
+    <div id="minimap">
+      <div id="minimapPlayer"></div>
+      <div id="minimapViewport"></div>
+      <!-- Minimap-Bäume werden dynamisch hinzugefügt -->
+    </div>
+  </div>
+  <script>
+    const gameArea = document.getElementById('gameArea');
+    const viewport = document.getElementById('viewport');
+    const character = document.getElementById('character');
+    const minimap = document.getElementById('minimap');
+    const minimapPlayer = document.getElementById('minimapPlayer');
+    const minimapViewport = document.getElementById('minimapViewport');
+
+    const tileSize = 32;
+    let posX = 30 * tileSize; // Start in der Mitte (30, 22)
+    let posY = 22 * tileSize;
+    let isMoving = false;
+
+    const mapWidth = 60; // Tiles breit
+    const mapHeight = 44; // Tiles hoch
+    const trees = [];
+    const minimapScale = 2; // 1 Tile = 2px auf der Minimap
+
+    // Bäume am Rand hinzufügen
+    function createBorderTrees() {
+      for (let x = 0; x < mapWidth; x++) {
+        addTree(x * tileSize, 0); // Oben
+        addTree(x * tileSize, (mapHeight - 1) * tileSize); // Unten
+      }
+      for (let y = 1; y < mapHeight - 1; y++) {
+        addTree(0, y * tileSize); // Links
+        addTree((mapWidth - 1) * tileSize, y * tileSize); // Rechts
+      }
+      addTree(32 * tileSize, 24 * tileSize); // Innerer Baum
+    }
+
+    function addTree(x, y) {
+      const tree = document.createElement('div');
+      tree.className = 'tree';
+      tree.style.left = `${x}px`;
+      tree.style.top = `${y}px`;
+      gameArea.appendChild(tree);
+      trees.push({ x, y });
+
+      const minimapTree = document.createElement('div');
+      minimapTree.className = 'minimapTree';
+      minimapTree.style.left = `${x / tileSize * minimapScale}px`;
+      minimapTree.style.top = `${y / tileSize * minimapScale}px`;
+      minimap.appendChild(minimapTree);
+    }
+
+    // Initiale Position des Spielers setzen
+    character.style.left = `${posX}px`;
+    character.style.top = `${posY}px`;
+
+    function updatePosition() {
+      character.style.left = `${posX}px`;
+      character.style.top = `${posY}px`;
+      updateCamera();
+      updateMinimap();
+    }
+
+    function updateCamera() {
+      const viewportWidth = viewport.clientWidth;
+      const viewportHeight = viewport.clientHeight;
+      const gameAreaWidth = gameArea.offsetWidth;
+      const gameAreaHeight = gameArea.offsetHeight;
+
+      let cameraX = posX - viewportWidth / 2 + tileSize / 2;
+      let cameraY = posY - viewportHeight / 2 + tileSize / 2;
+
+      cameraX = Math.max(0, Math.min(cameraX, gameAreaWidth - viewportWidth));
+      cameraY = Math.max(0, Math.min(cameraY, gameAreaHeight - viewportHeight));
+
+      gameArea.style.left = `${-cameraX}px`;
+      gameArea.style.top = `${-cameraY}px`;
+    }
+
+    function updateMinimap() {
+      minimapPlayer.style.left = `${posX / tileSize * minimapScale}px`;
+      minimapPlayer.style.top = `${posY / tileSize * minimapScale}px`;
+
+      const viewportWidth = viewport.clientWidth / tileSize * minimapScale;
+      const viewportHeight = viewport.clientHeight / tileSize * minimapScale;
+      const cameraX = posX / tileSize * minimapScale - viewportWidth / 2;
+      const cameraY = posY / tileSize * minimapScale - viewportHeight / 2;
+
+      minimapViewport.style.width = `${viewportWidth}px`;
+      minimapViewport.style.height = `${viewportHeight}px`;
+      minimapViewport.style.left = `${cameraX}px`;
+      minimapViewport.style.top = `${cameraY}px`;
+    }
+
+    function canMoveTo(newX, newY) {
+      return !trees.some(tree => tree.x === newX && tree.y === newY);
+    }
+
+    // Bewegung per Tastatur
+    document.addEventListener('keydown', (event) => {
+      if (isMoving) return;
+      let newX = posX;
+      let newY = posY;
+
+      switch (event.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          newY -= tileSize;
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          newY += tileSize;
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          newX -= tileSize;
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          newX += tileSize;
+          break;
+        default:
+          return;
+      }
+
+      if (canMoveTo(newX, newY)) {
+        isMoving = true;
+        posX = newX;
+        posY = newY;
+        character.style.transition = 'left 0.2s, top 0.2s';
+        updatePosition();
+
+        setTimeout(() => {
+          character.style.transition = '';
+          isMoving = false;
+        }, 200);
+      }
+    });
+
+    // Bewegung per Mausklick
+    viewport.addEventListener('click', (event) => {
+      if (isMoving) return;
+
+      const rect = viewport.getBoundingClientRect();
+      const cameraX = -parseInt(gameArea.style.left || 0);
+      const cameraY = -parseInt(gameArea.style.top || 0);
+      const targetX = Math.floor((event.clientX - rect.left + cameraX) / tileSize) * tileSize;
+      const targetY = Math.floor((event.clientY - rect.top + cameraY) / tileSize) * tileSize;
+
+      moveToTarget(targetX, targetY);
+      gameArea.focus(); // Fokus setzen, falls nötig
+    });
+
+    function moveToTarget(targetX, targetY) {
+      if (isMoving || (posX === targetX && posY === targetY)) return;
+
+      let newX = posX;
+      let newY = posY;
+
+      const dx = targetX - posX;
+      const dy = targetY - posY;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        newX += dx > 0 ? tileSize : -tileSize;
+      } else if (dy !== 0) {
+        newY += dy > 0 ? tileSize : -tileSize;
+      }
+
+      if (canMoveTo(newX, newY)) {
+        isMoving = true;
+        posX = newX;
+        posY = newY;
+        character.style.transition = 'left 0.2s, top 0.2s';
+        updatePosition();
+
+        setTimeout(() => {
+          character.style.transition = '';
+          isMoving = false;
+          moveToTarget(targetX, targetY);
+        }, 200);
+      }
+    }
+
+    // Initialisierung: Spielerposition setzen und Kamera/Minimap sofort aktualisieren
+    window.onload = () => {
+      createBorderTrees();
+      updatePosition(); // Aktualisiert Spielerposition, Kamera und Minimap
+      gameArea.focus(); // Setzt den Fokus direkt auf das Spielfeld
+      console.log('Spiel geladen, Startposition:', posX, posY, 'Kamera:', gameArea.style.left, gameArea.style.top);
+    };
+  </script>
+</body>
+</html>
